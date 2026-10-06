@@ -1,0 +1,1009 @@
+openapi: 3.0.3
+info:
+  title: API školní knihovny
+  version: 1.0.0
+  description: 'Dokumentace implementovaného Flask API podle RestApiMR_Vacek_Veber.pdf.
+    Titul má více fyzických výtisků. Lhůty jsou v kalendářních dnech (Europe/Prague).
+    API používá HTTP Basic Auth, nikoli JWT; přihlašovací endpoint neexistuje. Lokální
+    demo heslo: Demo12345!. E-mailové upomínky nejsou v této verzi implementovány.
+    Veřejné dokumentační cesty /docs/ a /static/openapi.yaml jsou pomocné prostředky
+    pro zobrazení této specifikace.'
+servers:
+- url: /
+  description: Stejný server a port jako Swagger UI (lokálně 8082).
+security:
+- basicAuth: []
+tags:
+- name: Knihy
+- name: Výtisky
+- name: Čtenáři
+- name: Výpůjčky
+- name: Rezervace
+- name: Přehledy
+paths:
+  /api/books:
+    get:
+      tags:
+      - Knihy
+      summary: Vyhledání titulů
+      operationId: listBooks
+      description: 'Oprávnění: student, employee, librarian. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookAvailability'
+              example:
+              - id: 1
+                title: Malý princ
+                author: Antoine de Saint-Exupéry
+                genre: Povídka
+                year: 1943
+                isbn: '9788000000001'
+                total_copies: 1
+                available_copies: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      parameters:
+      - name: q
+        in: query
+        schema:
+          type: string
+        description: Volitelný podřetězec názvu, autora, žánru nebo ISBN.
+    post:
+      tags:
+      - Knihy
+      summary: Založení titulu
+      operationId: createBook
+      description: 'Oprávnění: librarian. '
+      responses:
+        '201':
+          description: Vytvořeno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+  /api/books/{book_id}:
+    parameters:
+    - $ref: '#/components/parameters/book_id'
+    put:
+      tags:
+      - Knihy
+      summary: Úprava titulu
+      operationId: updateBook
+      description: 'Oprávnění: librarian. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+  /api/books/{book_id}/copies:
+    parameters:
+    - $ref: '#/components/parameters/book_id'
+    post:
+      tags:
+      - Výtisky
+      summary: Přidání výtisku
+      operationId: createCopy
+      description: 'Oprávnění: librarian. Neexistující titul vrací 409 CONFLICT kvůli
+        cizímu klíči.'
+      responses:
+        '201':
+          description: Vytvořeno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyInput'
+  /api/copies/{copy_id}/retire:
+    parameters:
+    - $ref: '#/components/parameters/copy_id'
+    patch:
+      tags:
+      - Výtisky
+      summary: Vyřazení výtisku
+      operationId: retireCopy
+      description: 'Oprávnění: librarian. Uzavře aktivní výpůjčku a přeřadí přidělenou
+        rezervaci do fronty.'
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetiredCopy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetireInput'
+  /api/readers:
+    get:
+      tags:
+      - Čtenáři
+      summary: Seznam čtenářů
+      operationId: listReaders
+      description: 'Oprávnění: librarian. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reader'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags:
+      - Čtenáři
+      summary: Založení čtenáře
+      operationId: createReader
+      description: 'Oprávnění: librarian. '
+      responses:
+        '201':
+          description: Vytvořeno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderInput'
+  /api/me/loans:
+    get:
+      tags:
+      - Výpůjčky
+      summary: Vlastní aktivní výpůjčky
+      operationId: listMyLoans
+      description: 'Oprávnění: student, employee. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Loan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/me/reservations:
+    get:
+      tags:
+      - Rezervace
+      summary: Vlastní aktivní rezervace
+      operationId: listMyReservations
+      description: 'Oprávnění: student, employee. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reservation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/loans:
+    post:
+      tags:
+      - Výpůjčky
+      summary: Zapůjčení výtisku
+      operationId: createLoan
+      description: 'Oprávnění: librarian. Termín +30 dnů. Žák nejvýše 3 aktivní knihy;
+        blokace při prodlení >30 dnů. Kódy: COPY_UNAVAILABLE, COPY_RESERVED, READER_BLOCKED,
+        LOAN_LIMIT. Zaměstnanec bez limitu a blokace.'
+      responses:
+        '201':
+          description: Vytvořeno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoanInput'
+  /api/copies/{copy_id}/return:
+    parameters:
+    - $ref: '#/components/parameters/copy_id'
+    post:
+      tags:
+      - Výpůjčky
+      summary: Vrácení výtisku
+      operationId: returnCopy
+      description: 'Oprávnění: librarian. Při absenci aktivní výpůjčky vrací 404 NO_ACTIVE_LOAN.
+        Vrácený výtisk předá prvnímu čekajícímu.'
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/loans/{loan_id}/extend:
+    parameters:
+    - $ref: '#/components/parameters/loan_id'
+    post:
+      tags:
+      - Výpůjčky
+      summary: Prodloužení vlastní výpůjčky
+      operationId: extendLoan
+      description: 'Oprávnění: student, employee. Jednou o 30 dnů od původního termínu.
+        409: LOAN_OVERDUE, ALREADY_EXTENDED, BOOK_RESERVED.'
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanExtended'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/reservations:
+    post:
+      tags:
+      - Rezervace
+      summary: Rezervace titulu
+      operationId: createReservation
+      description: 'Oprávnění: student. Volný výtisk se přidělí do konce data přidělení
+        +3 dny; jinak čekání ve frontě. 409: READER_BLOCKED, DUPLICATE_RESERVATION.'
+      responses:
+        '201':
+          description: Vytvořeno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationCreated'
+              example:
+                id: 1
+                user_id: 2
+                book_id: 1
+                copy_id: K001
+                status: assigned
+                expires_at: '2026-10-09'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationInput'
+  /api/reports/debtors:
+    get:
+      tags:
+      - Přehledy
+      summary: Seznam dlužníků
+      operationId: listDebtors
+      description: 'Oprávnění: librarian. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Debtor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/reports/graduates:
+    get:
+      tags:
+      - Přehledy
+      summary: Maturanti s nevrácenou knihou
+      operationId: listGraduateLoans
+      description: 'Oprávnění: librarian. '
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GraduateLoan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/reports/popularity:
+    get:
+      tags:
+      - Přehledy
+      summary: Pořadí titulů podle počtu výpůjček
+      operationId: listPopularity
+      description: 'Oprávnění: librarian, management. Bez osobních údajů. Obě hranice
+        období jsou zahrnuty.'
+      responses:
+        '200':
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Popularity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Počáteční den; výchozí 2000-01-01.
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Koncový den; výchozí dnešní datum.
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: 'E-mail a heslo. Demo: knihovnice@example.cz / Demo12345!; čtenář:
+        zak@example.cz. Pro vzdálené nasazení HTTPS.'
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required:
+          - code
+          - message
+      required:
+      - error
+    BookInput:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Malý princ
+        author:
+          type: string
+          example: Antoine de Saint-Exupéry
+        genre:
+          type: string
+          example: Povídka
+        isbn:
+          type: string
+          example: '9788000000001'
+        year:
+          type: integer
+          example: 1943
+      required:
+      - title
+      - author
+      - genre
+      - isbn
+      - year
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          example: Malý princ
+        author:
+          type: string
+          example: Antoine de Saint-Exupéry
+        genre:
+          type: string
+          example: Povídka
+        isbn:
+          type: string
+          example: '9788000000001'
+        year:
+          type: integer
+          example: 1943
+      required:
+      - id
+      - title
+      - author
+      - genre
+      - isbn
+      - year
+    BookAvailability:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          example: Malý princ
+        author:
+          type: string
+          example: Antoine de Saint-Exupéry
+        genre:
+          type: string
+          example: Povídka
+        isbn:
+          type: string
+          example: '9788000000001'
+        year:
+          type: integer
+          example: 1943
+        total_copies:
+          type: integer
+        available_copies:
+          type: integer
+      required:
+      - id
+      - title
+      - author
+      - genre
+      - isbn
+      - year
+      - total_copies
+      - available_copies
+    CopyInput:
+      type: object
+      properties:
+        id:
+          type: string
+          example: K002
+      required:
+      - id
+    CopyCreated:
+      type: object
+      properties:
+        id:
+          type: string
+        book_id:
+          type: integer
+      required:
+      - id
+      - book_id
+    RetireInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          enum:
+          - damaged
+          - lost
+      required:
+      - reason
+    RetiredCopy:
+      type: object
+      properties:
+        id:
+          type: string
+        retired:
+          type: string
+          enum:
+          - damaged
+          - lost
+      required:
+      - id
+      - retired
+    Reader:
+      type: object
+      properties:
+        id:
+          type: integer
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum:
+          - student
+          - employee
+        graduate:
+          type: integer
+          enum:
+          - 0
+          - 1
+      required:
+      - id
+      - first_name
+      - last_name
+      - email
+      - role
+      - graduate
+    ReaderInput:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum:
+          - student
+          - employee
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+          example: MojeHeslo123!
+        graduate:
+          type: boolean
+          default: false
+      required:
+      - first_name
+      - last_name
+      - email
+      - role
+      - password
+    IdResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+      required:
+      - id
+    LoanInput:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          example: 2
+        copy_id:
+          type: string
+          example: K001
+      required:
+      - user_id
+      - copy_id
+    Loan:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        copy_id:
+          type: string
+        borrowed_at:
+          type: string
+          format: date
+        due_at:
+          type: string
+          format: date
+        returned_at:
+          type: string
+          format: date
+          nullable: true
+        extended:
+          type: integer
+          enum:
+          - 0
+          - 1
+        title:
+          type: string
+      required:
+      - id
+      - user_id
+      - copy_id
+      - borrowed_at
+      - due_at
+      - returned_at
+      - extended
+      - title
+    LoanCreated:
+      type: object
+      properties:
+        id:
+          type: integer
+        due_at:
+          type: string
+          format: date
+      required:
+      - id
+      - due_at
+    LoanExtended:
+      type: object
+      properties:
+        id:
+          type: integer
+        due_at:
+          type: string
+          format: date
+        extended:
+          type: boolean
+          enum:
+          - true
+      required:
+      - id
+      - due_at
+      - extended
+    ReturnResult:
+      type: object
+      properties:
+        copy_id:
+          type: string
+        returned_at:
+          type: string
+          format: date
+      required:
+      - copy_id
+      - returned_at
+    ReservationInput:
+      type: object
+      properties:
+        book_id:
+          type: integer
+          example: 1
+      required:
+      - book_id
+    ReservationCreated:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        copy_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - waiting
+          - assigned
+          - fulfilled
+          - expired
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+        queue_position:
+          type: integer
+          minimum: 1
+          description: Pouze pro stav waiting.
+      required:
+      - id
+      - user_id
+      - book_id
+      - copy_id
+      - status
+      - expires_at
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        copy_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - waiting
+          - assigned
+          - fulfilled
+          - expired
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+        title:
+          type: string
+      required:
+      - id
+      - user_id
+      - book_id
+      - copy_id
+      - status
+      - expires_at
+      - title
+    Debtor:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+        title:
+          type: string
+        copy_id:
+          type: string
+        due_at:
+          type: string
+          format: date
+        days_overdue:
+          type: integer
+      required:
+      - first_name
+      - last_name
+      - email
+      - title
+      - copy_id
+      - due_at
+      - days_overdue
+    GraduateLoan:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        title:
+          type: string
+        copy_id:
+          type: string
+        due_at:
+          type: string
+          format: date
+      required:
+      - first_name
+      - last_name
+      - title
+      - copy_id
+      - due_at
+    Popularity:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        loan_count:
+          type: integer
+      required:
+      - id
+      - title
+      - loan_count
+  parameters:
+    book_id:
+      name: book_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: ID titulu.
+    copy_id:
+      name: copy_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Jedinečné číslo fyzického výtisku, např. K001.
+    loan_id:
+      name: loan_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: ID výpůjčky.
+  responses:
+    BadRequest:
+      description: Neplatné nebo chybějící vstupní údaje.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INVALID_INPUT
+              message: Neplatné nebo chybějící vstupní údaje.
+    Unauthorized:
+      description: Chybějící nebo neplatné HTTP Basic přihlášení.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Chybějící nebo neplatné HTTP Basic přihlášení.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Basic realm="Knihovna"
+    Forbidden:
+      description: Role nemá oprávnění k operaci.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Role nemá oprávnění k operaci.
+    NotFound:
+      description: Požadovaný záznam neexistuje nebo není vlastní aktivní výpůjčkou.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Požadovaný záznam neexistuje nebo není vlastní aktivní výpůjčkou.
+    Conflict:
+      description: Konflikt nebo zamítnutí knihovním pravidlem; konkrétní důvod je
+        v error.code.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: CONFLICT
+              message: Konflikt nebo zamítnutí knihovním pravidlem; konkrétní důvod
+                je v error.code.
+    InternalError:
+      description: Neočekávaná chyba serveru. Stávající Flask implementace vrací HTML,
+        nikoli JSON.
+      content:
+        text/html:
+          schema:
+            type: string

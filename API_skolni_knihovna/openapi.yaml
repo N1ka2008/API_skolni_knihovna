@@ -2,14 +2,14 @@ openapi: 3.0.3
 info:
   title: School News API
   version: 1.0.0
-  description: Dokumentace REST API kolní knihovny.
+  description: Dokumentace REST API školní knihovny.
 servers:
   - url: http://localhost:8080
     description: Lokální vývoj
   - url: https://api.example.edu
     description: Staging/produkce
 tags:
-  - name: Articles
+  - name: Kni
     description: Správa článků
 components:
   securitySchemes:

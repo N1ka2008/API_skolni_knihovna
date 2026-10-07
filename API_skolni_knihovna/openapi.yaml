@@ -2,8 +2,7 @@ openapi: 3.0.3
 info:
   title: API pro evidenci výpůjček školní knihovny
   version: 1.0.0
-  description: |
-    Dokumentace REST API pro evidenci výpůjček školní knihovny
+  description: Dokumentace REST API pro evidenci výpůjček školní knihovny
 servers:
   - url: http://localhost:8080
     description: Lokální vývoj
@@ -49,16 +48,24 @@ paths:
     post:
       tags: [Titles]
       operationId: createTitle
-      summary: Založení titulu (knihovnice)
+      summary: Založení titulu
       description: FR1.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/TitleCreate' }
+            examples:
+              sample:
+                summary: Kniha
+                value: { name: Babička, author: Božena Němcová, genre: Román, year: 1855, isbn: '978-80-00-00000-0' }
       responses:
         '201':
           description: Titul založen
+          headers:
+            Location:
+              description: URL nového zdroje
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Title' }
@@ -67,13 +74,27 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /titles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TitleId'
+    get:
+      tags: [Titles]
+      operationId: getTitle
+      summary: Detail titulu
+      description:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Title' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Titles]
       operationId: updateTitle
-      summary: Úprava titulu (knihovnice)
-      description: FR1.
-      parameters:
-        - $ref: '#/components/parameters/TitleId'
+      summary: Úprava titulu
+      description:
       requestBody:
         required: true
         content:
@@ -94,8 +115,8 @@ paths:
     post:
       tags: [Titles]
       operationId: createCopy
-      summary: Přidání výtisku k titulu (knihovnice)
-      description: FR2. Identifikační číslo je uvedeno i na fyzické knize (BR2).
+      summary: Přidání výtisku k titulu
+      description:
       parameters:
         - $ref: '#/components/parameters/TitleId'
       requestBody:
@@ -118,8 +139,8 @@ paths:
     post:
       tags: [Titles]
       operationId: withdrawCopy
-      summary: Vyřazení výtisku (knihovnice)
-      description: Vyřadí výtisk jako poškozený nebo ztracený. Je-li výtisk vypůjčený, výpůjčka se uzavře (FR4).
+      summary: Vyřazení výtisku
+      description:
       parameters:
         - $ref: '#/components/parameters/CopyId'
       requestBody:
@@ -142,8 +163,8 @@ paths:
     post:
       tags: [Readers]
       operationId: createReader
-      summary: Evidence čtenáře (knihovnice)
-      description: FR5.
+      summary: Evidence čtenáře
+      description:
       requestBody:
         required: true
         content:
@@ -163,7 +184,7 @@ paths:
     get:
       tags: [Loans]
       operationId: getMyLoans
-      summary: Moje aktivní výpůjčky
+      summary: aktivní výpůjčky
       description: Titul, identifikační číslo výtisku, termín vrácení a příznak prodloužení (FR6). Čtenář vidí jen vlastní data (NFR3).
       responses:
         '200':
@@ -180,8 +201,8 @@ paths:
     get:
       tags: [Reservations]
       operationId: getMyReservations
-      summary: Moje aktivní rezervace
-      description: FR6.
+      summary: aktivní rezervace
+      description:
       responses:
         '200':
           description: Aktivní rezervace přihlášeného čtenáře
@@ -197,11 +218,8 @@ paths:
     post:
       tags: [Loans]
       operationId: createLoan
-      summary: Zapůjčení výtisku (knihovnice)
-      description: |
-        UC3, FR7–FR9, FR13. Termín vrácení je 30 kalendářních dnů od data výpůjčky.
-        Zamítnutí: `COPY_UNAVAILABLE`, `COPY_RESERVED_FOR_OTHER` (v `details.validUntil` do kdy rezervace platí),
-        `LOAN_LIMIT_EXCEEDED`, `READER_BLOCKED` (v `details.overdueTitle` dlužný titul).
+      summary: Zapůjčení výtisku
+      description:
       requestBody:
         required: true
         content:
@@ -223,8 +241,8 @@ paths:
     post:
       tags: [Loans]
       operationId: returnLoan
-      summary: Vrácení výtisku (knihovnice)
-      description: UC4, FR10. Výpůjčka se uzavře s datem vrácení; výtisk se stane dostupným, nebo je přidělen čekající rezervaci (FR18).
+      summary: Vrácení výtisku
+      description:
       parameters:
         - $ref: '#/components/parameters/LoanId'
       responses:
@@ -242,9 +260,7 @@ paths:
       tags: [Loans]
       operationId: extendLoan
       summary: Prodloužení výpůjčky o 30 dní
-      description: |
-        UC2, FR11, FR12. Zamítnutí: `LOAN_OVERDUE` (termín uplynul), `ALREADY_EXTENDED`,
-        `TITLE_RESERVED_BY_OTHER` (rezervace jiného čtenáře).
+      description:
       parameters:
         - $ref: '#/components/parameters/LoanId'
       responses:
@@ -262,10 +278,8 @@ paths:
     post:
       tags: [Reservations]
       operationId: createReservation
-      summary: Rezervace titulu (žák)
-      description: |
-        UC1, FR15–FR17, FR20. Při dostupném výtisku je přidělen a rezervace platí 3 kalendářní dny (`ASSIGNED`),
-        jinak jde do fronty (`QUEUED`). Zamítnutí: `READER_BLOCKED`, `DUPLICATE_RESERVATION`.
+      summary: Rezervace titulu
+      description:
       requestBody:
         required: true
         content:
@@ -287,8 +301,8 @@ paths:
     get:
       tags: [Reports]
       operationId: getOverdue
-      summary: Seznam dlužníků (knihovnice)
-      description: UC5, FR21.
+      summary: Seznam dlužníků
+      description:
       responses:
         '200':
           description: Čtenáři s nevrácenou výpůjčkou po termínu
@@ -304,8 +318,8 @@ paths:
     get:
       tags: [Reports]
       operationId: getGraduatesUnreturned
-      summary: Maturanti s nevrácenou výpůjčkou (knihovnice)
-      description: UC7, FR23. Prázdný seznam znamená, že všichni maturanti vrátili.
+      summary: Maturanti s nevrácenou výpůjčkou
+      description:
       responses:
         '200':
           description: Seznam maturantů
@@ -321,8 +335,8 @@ paths:
     get:
       tags: [Reports]
       operationId: getPopularTitles
-      summary: Nejvíce půjčované tituly (knihovnice, vedení školy)
-      description: UC8, FR24. Pořadí podle počtu výpůjček přes všechny výtisky titulu, sestupně, bez osobních údajů.
+      summary: Nejvíce půjčované tituly
+      description:
       parameters:
         - { in: query, name: from, required: true, schema: { type: string, format: date }, description: Začátek období }
         - { in: query, name: to, required: true, schema: { type: string, format: date }, description: Konec období }
@@ -416,7 +430,7 @@ components:
         lastName: { type: string }
         email: { type: string, format: email }
         role: { type: string, enum: [STUDENT, EMPLOYEE] }
-        graduate: { type: boolean, description: Příznak maturant (jen u žáka) }
+        graduate: { type: boolean, description: }
     ReaderCreate:
       type: object
       required: [firstName, lastName, email, role]
@@ -488,7 +502,7 @@ components:
       in: query
       name: page
       schema: { type: integer, minimum: 1, default: 1 }
-      description: Index stránky (od 1)
+      description:
     PageSize:
       in: query
       name: pageSize
@@ -514,17 +528,17 @@ components:
       description: ID výpůjčky
   responses:
     BadRequest:
-      description: Neplatný požadavek (validační chyba)
+      description: Neplatný požadavek
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: VALIDATION_ERROR, message: Name is required }
     Unauthorized:
-      description: Chybí nebo je neplatný přístupový token
+      description: Chybí nebo je neplatný přístup
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example: { code: UNAUTHORIZED, message: Missing or invalid token }
+          example: { code: UNAUTHORIZED, message: Missing or invalid}
     NotFound:
       description: Zdroj nebyl nalezen
       content:
@@ -532,11 +546,11 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: NOT_FOUND, message: Loan not found }
     Conflict:
-      description: Operaci zamítlo pravidlo, důvod je v `code` (APIR2)
+      description:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example: { code: ALREADY_EXTENDED, message: Výpůjčka již byla jednou prodloužena }
+          example: { code: ALREADY_EXTENDED, message: Výpůjčka byla jednou prodloužena }
     InternalError:
       description: Neočekávaná chyba serveru
       content:

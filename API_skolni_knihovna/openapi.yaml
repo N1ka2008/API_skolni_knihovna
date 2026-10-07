@@ -2,25 +2,25 @@ openapi: 3.0.3
 info:
   title: API pro evidenci výpůjček školní knihovny
   version: 1.0.0
-  description: Dokumentace REST API pro evidenci výpůjček školní knihovny
+  description: Dokumentace REST API pro evidenci titulů, výtisků, čtenářů, výpůjček, rezervací a knihovních přehledů.
 servers:
   - url: http://localhost:8080
     description: Lokální vývoj
   - url: https://api.example.edu
-    description: Staging/produkce
+    description: Staging nebo produkce
 security:
   - bearerAuth: []
 tags:
   - name: Titles
-    description: Katalog titulů a výtisky
+    description: Katalog titulů a fyzických výtisků
   - name: Readers
-    description: Čtenáři
+    description: Evidence čtenářů
   - name: Loans
-    description: Výpůjčky
+    description: Výpůjčky a vracení knih
   - name: Reservations
-    description: Rezervace
+    description: Rezervace titulů
   - name: Reports
-    description: Dlužníci, maturanti, statistiky
+    description: Dlužníci, maturanti a statistiky výpůjček
 
 paths:
   /titles:
@@ -28,50 +28,91 @@ paths:
       tags: [Titles]
       operationId: searchTitles
       summary: Vyhledání titulů
-      description: Hledání podle názvu, autora, žánru nebo ISBN; vrací počet dostupných výtisků (FR1, FR14).
+      description: Hledání podle názvu, autora, žánru nebo ISBN. Výsledek vrací stránku titulů včetně počtu dostupných výtisků.
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
-        - { in: query, name: title, schema: { type: string }, description: Název }
-        - { in: query, name: author, schema: { type: string }, description: Autor }
-        - { in: query, name: genre, schema: { type: string }, description: Žánr }
-        - { in: query, name: isbn, schema: { type: string }, description: ISBN }
+        - $ref: '#/components/parameters/TitleFilter'
+        - $ref: '#/components/parameters/AuthorFilter'
+        - $ref: '#/components/parameters/GenreFilter'
+        - $ref: '#/components/parameters/IsbnFilter'
       responses:
         '200':
-          description: Stránka nalezených titulů
+          description: Stránka nalezených titulů.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TitlePage' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/TitlePage'
+              examples:
+                found:
+                  summary: Jeden nalezený titul
+                  value:
+                    items:
+                      - id: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+                        name: Babička
+                        author: Božena Němcová
+                        genre: Román
+                        year: 1855
+                        isbn: '978-80-00-00000-0'
+                        copiesTotal: 3
+                        copiesAvailable: 1
+                    total: 1
+                    page: 1
+                    pageSize: 20
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags: [Titles]
       operationId: createTitle
       summary: Založení titulu
-      description: FR1.
+      description: Založí nový bibliografický titul v katalogu. ISBN musí být v katalogu jedinečné.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/TitleCreate' }
+            schema:
+              $ref: '#/components/schemas/TitleCreate'
             examples:
-              sample:
-                summary: Kniha
-                value: { name: Babička, author: Božena Němcová, genre: Román, year: 1855, isbn: '978-80-00-00000-0' }
+              title:
+                summary: Nový titul
+                value:
+                  name: Babička
+                  author: Božena Němcová
+                  genre: Román
+                  year: 1855
+                  isbn: '978-80-00-00000-0'
       responses:
         '201':
-          description: Titul založen
+          description: Titul byl založen.
           headers:
             Location:
-              description: URL nového zdroje
-              schema: { type: string }
+              description: URL nového titulu.
+              schema:
+                type: string
+                example: /titles/0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Title' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Title'
+              examples:
+                created:
+                  $ref: '#/components/examples/Title'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /titles/{id}:
     parameters:
@@ -80,277 +121,518 @@ paths:
       tags: [Titles]
       operationId: getTitle
       summary: Detail titulu
-      description:
+      description: Vrátí detail jednoho titulu včetně počtu všech a dostupných výtisků.
       responses:
         '200':
-          description: OK
+          description: Detail titulu.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Title' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Title'
+              examples:
+                title:
+                  $ref: '#/components/examples/Title'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     put:
       tags: [Titles]
       operationId: updateTitle
       summary: Úprava titulu
-      description:
+      description: Upraví základní údaje existujícího titulu.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/TitleCreate' }
+            schema:
+              $ref: '#/components/schemas/TitleCreate'
+            examples:
+              title:
+                summary: Upravený titul
+                value:
+                  name: Babička
+                  author: Božena Němcová
+                  genre: Román
+                  year: 1855
+                  isbn: '978-80-00-00000-0'
       responses:
         '200':
-          description: Titul upraven
+          description: Titul byl upraven.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Title' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Title'
+              examples:
+                updated:
+                  $ref: '#/components/examples/Title'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /titles/{id}/copies:
+    parameters:
+      - $ref: '#/components/parameters/TitleId'
     post:
       tags: [Titles]
       operationId: createCopy
       summary: Přidání výtisku k titulu
-      description:
-      parameters:
-        - $ref: '#/components/parameters/TitleId'
+      description: Přidá fyzický výtisk k existujícímu titulu. Identifikační číslo výtisku musí být jedinečné.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CopyCreate' }
+            schema:
+              $ref: '#/components/schemas/CopyCreate'
+            examples:
+              copy:
+                summary: Nový výtisk
+                value:
+                  copyId: K-000123
       responses:
         '201':
-          description: Výtisk přidán
+          description: Výtisk byl přidán.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Copy' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Copy'
+              examples:
+                created:
+                  $ref: '#/components/examples/Copy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /copies/{copyId}/withdraw:
+    parameters:
+      - $ref: '#/components/parameters/CopyId'
     post:
       tags: [Titles]
       operationId: withdrawCopy
       summary: Vyřazení výtisku
-      description:
-      parameters:
-        - $ref: '#/components/parameters/CopyId'
+      description: Označí výtisk jako poškozený nebo ztracený. Vyřazený výtisk se už nenabízí k půjčení.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WithdrawRequest' }
+            schema:
+              $ref: '#/components/schemas/WithdrawRequest'
+            examples:
+              damaged:
+                summary: Poškozený výtisk
+                value:
+                  reason: DAMAGED
+              lost:
+                summary: Ztracený výtisk
+                value:
+                  reason: LOST
       responses:
         '200':
-          description: Výtisk vyřazen
+          description: Výtisk byl vyřazen.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Copy' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Copy'
+              examples:
+                withdrawn:
+                  summary: Vyřazený výtisk
+                  value:
+                    copyId: K-000123
+                    titleId: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+                    status: WITHDRAWN
+                    withdrawalReason: DAMAGED
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /readers:
     post:
       tags: [Readers]
       operationId: createReader
       summary: Evidence čtenáře
-      description:
+      description: Založí studenta nebo zaměstnance jako čtenáře knihovny.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReaderCreate' }
+            schema:
+              $ref: '#/components/schemas/ReaderCreate'
+            examples:
+              student:
+                summary: Student
+                value:
+                  firstName: Anna
+                  lastName: Nováková
+                  email: anna.novakova@example.edu
+                  role: STUDENT
+                  graduate: false
       responses:
         '201':
-          description: Čtenář založen
+          description: Čtenář byl založen.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Reader' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Reader'
+              examples:
+                created:
+                  $ref: '#/components/examples/Reader'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /me/loans:
     get:
       tags: [Loans]
       operationId: getMyLoans
-      summary: aktivní výpůjčky
-      description: Titul, identifikační číslo výtisku, termín vrácení a příznak prodloužení (FR6). Čtenář vidí jen vlastní data (NFR3).
+      summary: Aktivní výpůjčky přihlášeného čtenáře
+      description: Vrací aktivní výpůjčky aktuálně přihlášeného čtenáře včetně titulu, čísla výtisku, termínu vrácení a informace o prodloužení.
       responses:
         '200':
-          description: Aktivní výpůjčky přihlášeného čtenáře
+          description: Aktivní výpůjčky.
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Loan' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+                items:
+                  $ref: '#/components/schemas/Loan'
+              examples:
+                active:
+                  summary: Jedna aktivní výpůjčka
+                  value:
+                    - id: 1b85aa3f-7251-4e1e-8b55-80f93aa708ce
+                      titleName: Babička
+                      copyId: K-000123
+                      borrowedAt: '2026-10-07'
+                      dueDate: '2026-11-06'
+                      extended: false
+                      returnedAt: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /me/reservations:
     get:
       tags: [Reservations]
       operationId: getMyReservations
-      summary: aktivní rezervace
-      description:
+      summary: Aktivní rezervace přihlášeného čtenáře
+      description: Vrací čekající nebo přidělené rezervace aktuálně přihlášeného čtenáře.
       responses:
         '200':
-          description: Aktivní rezervace přihlášeného čtenáře
+          description: Aktivní rezervace.
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Reservation' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+                items:
+                  $ref: '#/components/schemas/Reservation'
+              examples:
+                active:
+                  summary: Jedna rezervace ve frontě
+                  value:
+                    - id: 25f9dbdf-30e2-4cf4-a94d-6afc30df16c9
+                      titleId: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+                      status: QUEUED
+                      queuePosition: 1
+                      expiresAt: null
+                      createdAt: '2026-10-07T10:00:00+02:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /loans:
     post:
       tags: [Loans]
       operationId: createLoan
       summary: Zapůjčení výtisku
-      description:
+      description: Založí výpůjčku pro čtenáře. Student může mít nejvýše tři aktivní výpůjčky a nesmí být blokovaný kvůli prodlení.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LoanCreate' }
+            schema:
+              $ref: '#/components/schemas/LoanCreate'
+            examples:
+              loan:
+                summary: Zapůjčení dostupného výtisku
+                value:
+                  copyId: K-000123
+                  readerId: 7b55fd08-f8d8-4870-bd8f-0d2f0a73bbf5
       responses:
         '201':
-          description: Výpůjčka uložena
+          description: Výpůjčka byla založena.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Loan' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Loan'
+              examples:
+                created:
+                  $ref: '#/components/examples/Loan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /loans/{id}/return:
+    parameters:
+      - $ref: '#/components/parameters/LoanId'
     post:
       tags: [Loans]
       operationId: returnLoan
-      summary: Vrácení výtisku
-      description:
-      parameters:
-        - $ref: '#/components/parameters/LoanId'
+      summary: Vrácení výpůjčky
+      description: Za evidovanou výpůjčku uloží datum vrácení a uvolní výtisk pro další půjčení nebo rezervaci.
       responses:
         '200':
-          description: Vrácení zaevidováno
+          description: Vrácení bylo zaevidováno.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Loan' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Loan'
+              examples:
+                returned:
+                  summary: Vrácená výpůjčka
+                  value:
+                    id: 1b85aa3f-7251-4e1e-8b55-80f93aa708ce
+                    titleName: Babička
+                    copyId: K-000123
+                    borrowedAt: '2026-10-07'
+                    dueDate: '2026-11-06'
+                    extended: false
+                    returnedAt: '2026-10-20'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /loans/{id}/extend:
+    parameters:
+      - $ref: '#/components/parameters/LoanId'
     post:
       tags: [Loans]
       operationId: extendLoan
       summary: Prodloužení výpůjčky o 30 dní
-      description:
-      parameters:
-        - $ref: '#/components/parameters/LoanId'
+      description: Prodlouží vlastní aktivní výpůjčku jednou o 30 dní, pokud knihu neblokuje jiná rezervace a výpůjčka není po termínu.
       responses:
         '200':
-          description: Výpůjčka prodloužena, odpověď obsahuje nový `dueDate`
+          description: Výpůjčka byla prodloužena.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Loan' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Loan'
+              examples:
+                extended:
+                  summary: Prodloužená výpůjčka
+                  value:
+                    id: 1b85aa3f-7251-4e1e-8b55-80f93aa708ce
+                    titleName: Babička
+                    copyId: K-000123
+                    borrowedAt: '2026-10-07'
+                    dueDate: '2026-12-06'
+                    extended: true
+                    returnedAt: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /reservations:
     post:
       tags: [Reservations]
       operationId: createReservation
       summary: Rezervace titulu
-      description:
+      description: Založí rezervaci titulu. Pokud je dostupný výtisk, rezervace se může rovnou přidělit; jinak je čtenář zařazen do fronty.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReservationCreate' }
+            schema:
+              $ref: '#/components/schemas/ReservationCreate'
+            examples:
+              reservation:
+                summary: Rezervace titulu
+                value:
+                  titleId: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
       responses:
         '201':
-          description: Rezervace vytvořena
+          description: Rezervace byla vytvořena.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Reservation' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '500': { $ref: '#/components/responses/InternalError' }
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              examples:
+                queued:
+                  $ref: '#/components/examples/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /reports/overdue:
     get:
       tags: [Reports]
       operationId: getOverdue
       summary: Seznam dlužníků
-      description:
+      description: Vrací čtenáře s aktivní výpůjčkou po termínu vrácení.
       responses:
         '200':
-          description: Čtenáři s nevrácenou výpůjčkou po termínu
+          description: Čtenáři s nevrácenou výpůjčkou po termínu.
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/OverdueEntry' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+                items:
+                  $ref: '#/components/schemas/OverdueEntry'
+              examples:
+                debtors:
+                  summary: Jeden dlužník
+                  value:
+                    - readerName: Anna Nováková
+                      email: anna.novakova@example.edu
+                      titleName: Babička
+                      copyId: K-000123
+                      dueDate: '2026-09-01'
+                      daysOverdue: 36
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /reports/graduates-unreturned:
     get:
       tags: [Reports]
       operationId: getGraduatesUnreturned
       summary: Maturanti s nevrácenou výpůjčkou
-      description:
+      description: Vrací maturanty, kteří mají stále aktivní výpůjčku.
       responses:
         '200':
-          description: Seznam maturantů
+          description: Seznam maturantů s nevrácenými knihami.
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/GraduateEntry' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+                items:
+                  $ref: '#/components/schemas/GraduateEntry'
+              examples:
+                graduates:
+                  summary: Jeden maturant
+                  value:
+                    - readerName: Anna Nováková
+                      titleName: Babička
+                      copyId: K-000123
+                      dueDate: '2026-11-06'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /reports/popular-titles:
     get:
       tags: [Reports]
       operationId: getPopularTitles
       summary: Nejvíce půjčované tituly
-      description:
+      description: Vrací pořadí titulů podle počtu výpůjček v zadaném období.
       parameters:
-        - { in: query, name: from, required: true, schema: { type: string, format: date }, description: Začátek období }
-        - { in: query, name: to, required: true, schema: { type: string, format: date }, description: Konec období }
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
       responses:
         '200':
-          description: Pořadí titulů
+          description: Pořadí titulů podle počtu výpůjček.
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/PopularTitle' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '500': { $ref: '#/components/responses/InternalError' }
+                items:
+                  $ref: '#/components/schemas/PopularTitle'
+              examples:
+                popular:
+                  summary: Jeden titul v pořadí
+                  value:
+                    - titleId: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+                      titleName: Babička
+                      loanCount: 18
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
 components:
   securitySchemes:
@@ -358,202 +640,526 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: Přístupový token posílaný v hlavičce Authorization ve formátu Bearer.
+
   schemas:
     Error:
       type: object
       required: [code, message]
       properties:
-        code: { type: string, example: LOAN_LIMIT_EXCEEDED }
-        message: { type: string, example: Žák již má tři nevrácené výpůjčky }
+        code:
+          type: string
+          example: LOAN_LIMIT_EXCEEDED
+        message:
+          type: string
+          example: Žák již má tři aktivní výpůjčky.
         details:
           type: object
+          nullable: true
           additionalProperties: true
-          description: Doplňující údaje (např. dlužný titul, konec platnosti rezervace)
-    Title:
-      type: object
-      required: [id, name, author, genre, year, isbn, copiesTotal, copiesAvailable]
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string, example: Babička }
-        author: { type: string, example: Božena Němcová }
-        genre: { type: string, example: Román }
-        year: { type: integer, example: 1855 }
-        isbn: { type: string, example: '978-80-00-00000-0' }
-        copiesTotal: { type: integer, example: 3 }
-        copiesAvailable: { type: integer, example: 1 }
-    TitleCreate:
+          description: Doplňující údaje k chybě, například ID záznamu nebo konec platnosti rezervace.
+
+    TitleFields:
       type: object
       required: [name, author, genre, year, isbn]
       properties:
-        name: { type: string, minLength: 1 }
-        author: { type: string, minLength: 1 }
-        genre: { type: string }
-        year: { type: integer }
-        isbn: { type: string }
+        name:
+          type: string
+          minLength: 1
+          example: Babička
+        author:
+          type: string
+          minLength: 1
+          example: Božena Němcová
+        genre:
+          type: string
+          minLength: 1
+          example: Román
+        year:
+          type: integer
+          minimum: 0
+          example: 1855
+        isbn:
+          type: string
+          minLength: 1
+          example: '978-80-00-00000-0'
+
+    TitleCreate:
+      allOf:
+        - $ref: '#/components/schemas/TitleFields'
+
+    Title:
+      allOf:
+        - $ref: '#/components/schemas/TitleFields'
+        - type: object
+          required: [id, copiesTotal, copiesAvailable]
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+            copiesTotal:
+              type: integer
+              minimum: 0
+              example: 3
+            copiesAvailable:
+              type: integer
+              minimum: 0
+              example: 1
+
     TitlePage:
       type: object
-      required: [items, total]
+      required: [items, total, page, pageSize]
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/Title' }
-        total: { type: integer, example: 42 }
+          items:
+            $ref: '#/components/schemas/Title'
+        total:
+          type: integer
+          minimum: 0
+          example: 42
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+
     Copy:
       type: object
-      required: [copyId, titleId, status]
+      required: [copyId, titleId, status, withdrawalReason]
       properties:
-        copyId: { type: string, example: K-000123 }
-        titleId: { type: string, format: uuid }
+        copyId:
+          type: string
+          example: K-000123
+        titleId:
+          type: string
+          format: uuid
+          example: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
         status:
           type: string
           enum: [AVAILABLE, LOANED, RESERVED, WITHDRAWN]
+          example: AVAILABLE
         withdrawalReason:
           type: string
           enum: [DAMAGED, LOST]
           nullable: true
+          example: null
+
     CopyCreate:
       type: object
       required: [copyId]
       properties:
-        copyId: { type: string, minLength: 1, example: K-000123 }
+        copyId:
+          type: string
+          minLength: 1
+          example: K-000123
+
     WithdrawRequest:
       type: object
       required: [reason]
       properties:
-        reason: { type: string, enum: [DAMAGED, LOST] }
-    Reader:
-      type: object
-      required: [id, firstName, lastName, email, role]
-      properties:
-        id: { type: string, format: uuid }
-        firstName: { type: string }
-        lastName: { type: string }
-        email: { type: string, format: email }
-        role: { type: string, enum: [STUDENT, EMPLOYEE] }
-        graduate: { type: boolean, description: }
-    ReaderCreate:
+        reason:
+          type: string
+          enum: [DAMAGED, LOST]
+          example: DAMAGED
+
+    ReaderFields:
       type: object
       required: [firstName, lastName, email, role]
       properties:
-        firstName: { type: string }
-        lastName: { type: string }
-        email: { type: string, format: email }
-        role: { type: string, enum: [STUDENT, EMPLOYEE] }
-        graduate: { type: boolean, default: false }
+        firstName:
+          type: string
+          minLength: 1
+          example: Anna
+        lastName:
+          type: string
+          minLength: 1
+          example: Nováková
+        email:
+          type: string
+          format: email
+          example: anna.novakova@example.edu
+        role:
+          type: string
+          enum: [STUDENT, EMPLOYEE]
+          example: STUDENT
+        graduate:
+          type: boolean
+          default: false
+          description: Příznak maturanta, používá se jen u studentů.
+
+    ReaderCreate:
+      allOf:
+        - $ref: '#/components/schemas/ReaderFields'
+
+    Reader:
+      allOf:
+        - $ref: '#/components/schemas/ReaderFields'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: 7b55fd08-f8d8-4870-bd8f-0d2f0a73bbf5
+
     Loan:
       type: object
-      required: [id, titleName, copyId, dueDate, extended]
+      required: [id, titleName, copyId, borrowedAt, dueDate, extended, returnedAt]
       properties:
-        id: { type: string, format: uuid }
-        titleName: { type: string }
-        copyId: { type: string }
-        borrowedAt: { type: string, format: date }
-        dueDate: { type: string, format: date }
-        extended: { type: boolean }
-        returnedAt: { type: string, format: date, nullable: true }
+        id:
+          type: string
+          format: uuid
+          example: 1b85aa3f-7251-4e1e-8b55-80f93aa708ce
+        titleName:
+          type: string
+          example: Babička
+        copyId:
+          type: string
+          example: K-000123
+        borrowedAt:
+          type: string
+          format: date
+          example: '2026-10-07'
+        dueDate:
+          type: string
+          format: date
+          example: '2026-11-06'
+        extended:
+          type: boolean
+          example: false
+        returnedAt:
+          type: string
+          format: date
+          nullable: true
+          example: null
+
     LoanCreate:
       type: object
       required: [copyId, readerId]
       properties:
-        copyId: { type: string }
-        readerId: { type: string, format: uuid }
+        copyId:
+          type: string
+          example: K-000123
+        readerId:
+          type: string
+          format: uuid
+          example: 7b55fd08-f8d8-4870-bd8f-0d2f0a73bbf5
+
     Reservation:
       type: object
-      required: [id, titleId, status, createdAt]
+      required: [id, titleId, status, queuePosition, expiresAt, createdAt]
       properties:
-        id: { type: string, format: uuid }
-        titleId: { type: string, format: uuid }
-        status: { type: string, enum: [QUEUED, ASSIGNED, FULFILLED] }
-        queuePosition: { type: integer, nullable: true }
-        expiresAt: { type: string, format: date-time, nullable: true }
-        createdAt: { type: string, format: date-time }
+        id:
+          type: string
+          format: uuid
+          example: 25f9dbdf-30e2-4cf4-a94d-6afc30df16c9
+        titleId:
+          type: string
+          format: uuid
+          example: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+        status:
+          type: string
+          enum: [QUEUED, ASSIGNED, FULFILLED, EXPIRED]
+          example: QUEUED
+        queuePosition:
+          type: integer
+          nullable: true
+          minimum: 1
+          example: 1
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-07T10:00:00+02:00'
+
     ReservationCreate:
       type: object
       required: [titleId]
       properties:
-        titleId: { type: string, format: uuid }
+        titleId:
+          type: string
+          format: uuid
+          example: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+
     OverdueEntry:
       type: object
       required: [readerName, email, titleName, copyId, dueDate, daysOverdue]
       properties:
-        readerName: { type: string }
-        email: { type: string, format: email }
-        titleName: { type: string }
-        copyId: { type: string }
-        dueDate: { type: string, format: date }
-        daysOverdue: { type: integer }
+        readerName:
+          type: string
+          example: Anna Nováková
+        email:
+          type: string
+          format: email
+          example: anna.novakova@example.edu
+        titleName:
+          type: string
+          example: Babička
+        copyId:
+          type: string
+          example: K-000123
+        dueDate:
+          type: string
+          format: date
+          example: '2026-09-01'
+        daysOverdue:
+          type: integer
+          minimum: 1
+          example: 36
+
     GraduateEntry:
       type: object
       required: [readerName, titleName, copyId, dueDate]
       properties:
-        readerName: { type: string }
-        titleName: { type: string }
-        copyId: { type: string }
-        dueDate: { type: string, format: date }
+        readerName:
+          type: string
+          example: Anna Nováková
+        titleName:
+          type: string
+          example: Babička
+        copyId:
+          type: string
+          example: K-000123
+        dueDate:
+          type: string
+          format: date
+          example: '2026-11-06'
+
     PopularTitle:
       type: object
       required: [titleId, titleName, loanCount]
       properties:
-        titleId: { type: string, format: uuid }
-        titleName: { type: string }
-        loanCount: { type: integer }
+        titleId:
+          type: string
+          format: uuid
+          example: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+        titleName:
+          type: string
+          example: Babička
+        loanCount:
+          type: integer
+          minimum: 0
+          example: 18
+
   parameters:
     Page:
       in: query
       name: page
-      schema: { type: integer, minimum: 1, default: 1 }
-      description:
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Číslo stránky výsledků.
     PageSize:
       in: query
       name: pageSize
-      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
-      description: Počet položek na stránku
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Počet položek na stránku.
+    TitleFilter:
+      in: query
+      name: title
+      schema:
+        type: string
+      description: Volitelný filtr podle názvu titulu.
+    AuthorFilter:
+      in: query
+      name: author
+      schema:
+        type: string
+      description: Volitelný filtr podle autora.
+    GenreFilter:
+      in: query
+      name: genre
+      schema:
+        type: string
+      description: Volitelný filtr podle žánru.
+    IsbnFilter:
+      in: query
+      name: isbn
+      schema:
+        type: string
+      description: Volitelný filtr podle ISBN.
+    DateFrom:
+      in: query
+      name: from
+      required: true
+      schema:
+        type: string
+        format: date
+      description: Začátek období včetně.
+      example: '2026-01-01'
+    DateTo:
+      in: query
+      name: to
+      required: true
+      schema:
+        type: string
+        format: date
+      description: Konec období včetně.
+      example: '2026-12-31'
     TitleId:
       in: path
       name: id
       required: true
-      schema: { type: string, format: uuid }
-      description: ID titulu
+      schema:
+        type: string
+        format: uuid
+      description: ID titulu.
     CopyId:
       in: path
       name: copyId
       required: true
-      schema: { type: string }
-      description: Identifikační číslo výtisku
+      schema:
+        type: string
+      description: Identifikační číslo fyzického výtisku.
     LoanId:
       in: path
       name: id
       required: true
-      schema: { type: string, format: uuid }
-      description: ID výpůjčky
+      schema:
+        type: string
+        format: uuid
+      description: ID výpůjčky.
+
   responses:
     BadRequest:
-      description: Neplatný požadavek
+      description: Neplatný požadavek nebo validační chyba.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { code: VALIDATION_ERROR, message: Name is required }
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            validation:
+              summary: Validační chyba
+              value:
+                code: VALIDATION_ERROR
+                message: Povinné pole name není vyplněné.
     Unauthorized:
-      description: Chybí nebo je neplatný přístup
+      description: Chybí nebo je neplatný přístupový token.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { code: UNAUTHORIZED, message: Missing or invalid}
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              summary: Nepřihlášený uživatel
+              value:
+                code: UNAUTHORIZED
+                message: Chybí nebo je neplatný přístupový token.
+    Forbidden:
+      description: Přihlášený uživatel nemá oprávnění k operaci.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            forbidden:
+              summary: Nedostatečná role
+              value:
+                code: FORBIDDEN
+                message: Tato role nemá oprávnění k operaci.
     NotFound:
-      description: Zdroj nebyl nalezen
+      description: Požadovaný zdroj nebyl nalezen.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { code: NOT_FOUND, message: Loan not found }
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missing:
+              summary: Nenalezený zdroj
+              value:
+                code: NOT_FOUND
+                message: Záznam nebyl nalezen.
     Conflict:
-      description:
+      description: Konflikt se stavem systému nebo knihovním pravidlem.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { code: ALREADY_EXTENDED, message: Výpůjčka byla jednou prodloužena }
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            loanLimit:
+              summary: Překročený limit výpůjček
+              value:
+                code: LOAN_LIMIT_EXCEEDED
+                message: Žák již má tři aktivní výpůjčky.
+            alreadyExtended:
+              summary: Výpůjčka už byla prodloužena
+              value:
+                code: ALREADY_EXTENDED
+                message: Výpůjčka byla jednou prodloužena.
     InternalError:
-      description: Neočekávaná chyba serveru
+      description: Neočekávaná chyba serveru.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { code: INTERNAL_ERROR, message: Unexpected server error }
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            internal:
+              summary: Chyba serveru
+              value:
+                code: INTERNAL_ERROR
+                message: Neočekávaná chyba serveru.
+    NoContent:
+      description: Operace proběhla úspěšně a odpověď nemá tělo. Aktuální veřejné endpointy tuto odpověď nepoužívají, protože vrací JSON.
+
+  examples:
+    Title:
+      summary: Titul s dostupností
+      value:
+        id: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+        name: Babička
+        author: Božena Němcová
+        genre: Román
+        year: 1855
+        isbn: '978-80-00-00000-0'
+        copiesTotal: 3
+        copiesAvailable: 1
+    Copy:
+      summary: Dostupný výtisk
+      value:
+        copyId: K-000123
+        titleId: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+        status: AVAILABLE
+        withdrawalReason: null
+    Reader:
+      summary: Student knihovny
+      value:
+        id: 7b55fd08-f8d8-4870-bd8f-0d2f0a73bbf5
+        firstName: Anna
+        lastName: Nováková
+        email: anna.novakova@example.edu
+        role: STUDENT
+        graduate: false
+    Loan:
+      summary: Aktivní výpůjčka
+      value:
+        id: 1b85aa3f-7251-4e1e-8b55-80f93aa708ce
+        titleName: Babička
+        copyId: K-000123
+        borrowedAt: '2026-10-07'
+        dueDate: '2026-11-06'
+        extended: false
+        returnedAt: null
+    Reservation:
+      summary: Rezervace ve frontě
+      value:
+        id: 25f9dbdf-30e2-4cf4-a94d-6afc30df16c9
+        titleId: 0f6d6f3a-9a7f-4e7d-b2f2-9db0d2d61c01
+        status: QUEUED
+        queuePosition: 1
+        expiresAt: null
+        createdAt: '2026-10-07T10:00:00+02:00'
